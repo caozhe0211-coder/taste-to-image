@@ -1,5 +1,4 @@
 import marimo
-from marimo import Html
 
 __generated_with = "0.18.4"
 app = marimo.App()
@@ -10,6 +9,7 @@ def _():
     """
     Common imports shared across the app.
     """
+
     import numpy as np
     import os
     import json
@@ -53,7 +53,7 @@ def _(np, num_input_classes, os):
     During loading, input_class is converted to a one-hot vector of length 7.
     """
 
-    data_path = "water_taste_data.csv"
+    data_path = "water_taste_data_dummy.csv"
     if not os.path.exists(data_path):
         raise FileNotFoundError(
             f"Dataset file '{data_path}' not found. "
@@ -107,6 +107,7 @@ def _(X, np, num_training_steps, y):
 
     This is a minimal NumPy-based implementation (no external ML libraries).
     """
+
 
     class SimpleMLP:
         def __init__(
@@ -190,6 +191,7 @@ def _(X, np, num_training_steps, y):
                     self.b2 -= lr * grad_b2
                     self.W1 -= lr * grad_W1
                     self.b1 -= lr * grad_b1
+
 
     input_dim = X.shape[1]
     num_classes = int(y.max()) + 1
@@ -470,6 +472,19 @@ def _(mo):
 
 
 @app.cell
+def _(mo, os):
+    """
+    Debug: show whether OPENROUTER_API_KEY is visible to the Marimo app.
+    """
+
+    has_key = bool(os.getenv("OPENROUTER_API_KEY"))
+
+    if has_key:
+        return mo.md("✅ OPENROUTER_API_KEY detected in this Marimo session.")
+    return mo.md("⚠️ OPENROUTER_API_KEY not detected in this Marimo session.")
+
+
+@app.cell
 def _(generate_taste_image, mo, os, prompt, run_button):
     """
     Interactive step: call OpenRouter with the constructed prompt to generate
@@ -499,6 +514,7 @@ def _(generate_taste_image, mo, os, prompt, run_button):
     # `image_url` is a data URL (e.g. data:image/png;base64,...);
     # use marimo's built-in image helper to render it.
     mo.image(src=image_url, width=512, rounded=True)
+    return
 
 
 if __name__ == "__main__":
