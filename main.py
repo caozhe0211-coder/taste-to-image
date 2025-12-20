@@ -42,10 +42,15 @@ def _():
 @app.cell
 def _(np, num_input_classes, os):
     """
-    Load a dummy dataset for training a 7-class MLP from disk.
+    Load a simple brand→taste mapping dataset for training the MLP.
 
     The dataset is stored in `water_taste_data.csv`, with each row containing
-    7 input features followed by an integer class label (0–6).
+    two integers:
+
+      input_class (0–6): the water brand / input class index
+      output_class (0–6): the taste class index
+
+    During loading, input_class is converted to a one-hot vector of length 7.
     """
 
     data_path = "water_taste_data.csv"
@@ -55,15 +60,30 @@ def _(np, num_input_classes, os):
             "Make sure it exists or regenerate it."
         )
 
-    data = np.loadtxt(data_path, delimiter=",")
-    if data.shape[1] != num_input_classes + 1:
+    data = np.loadtxt(data_path, delimiter=",", dtype=int)
+
+    # Handle the edge case where there's only a single row.
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
+
+    if data.shape[1] != 2:
         raise ValueError(
-            f"Expected {num_input_classes + 1} columns in dataset, "
+            f"Expected 2 columns (input_class, output_class) in dataset, "
             f"got {data.shape[1]}"
         )
 
-    X = data[:, :num_input_classes]
-    y = data[:, num_input_classes].astype(int)
+    input_indices = data[:, 0]
+    output_indices = data[:, 1]
+
+    if input_indices.min() < 0 or input_indices.max() >= num_input_classes:
+        raise ValueError(
+            "Input class indices in dataset must be in the range "
+            f"[0, {num_input_classes - 1}]"
+        )
+
+    # Convert input class indices to one-hot vectors of length num_input_classes.
+    X = np.eye(num_input_classes)[input_indices]
+    y = output_indices.astype(int)
     return X, y
 
 
