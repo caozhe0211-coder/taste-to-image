@@ -479,9 +479,12 @@ def _(mo, os):
 
     has_key = bool(os.getenv("OPENROUTER_API_KEY"))
 
-    if has_key:
-        return mo.md("✅ OPENROUTER_API_KEY detected in this Marimo session.")
-    return mo.md("⚠️ OPENROUTER_API_KEY not detected in this Marimo session.")
+    status = (
+        "✅ OPENROUTER_API_KEY detected in this Marimo session."
+        if has_key
+        else "⚠️ OPENROUTER_API_KEY not detected in this Marimo session."
+    )
+    mo.md(status)
 
 
 @app.cell
