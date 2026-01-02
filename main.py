@@ -13,19 +13,18 @@ def _():
     import numpy as np
     import os
     import json
-    return json, np, os
+    import urllib.request as urllib_request
+    import urllib.error as urllib_error
+    return json, np, os, urllib_error, urllib_request
 
 
 @app.cell
-def _():
+def _(json, os):
     """
     Load canonical labels (water types and taste categories).
 
     `labels.json` is the single source of truth for display names.
     """
-
-    import json
-    import os
 
     labels_path = "labels.json"
     if not os.path.exists(labels_path):
@@ -34,10 +33,10 @@ def _():
         )
 
     with open(labels_path, encoding="utf-8") as f:
-        labels = json.load(f)
+        label_data = json.load(f)
 
-    water_type_names = labels.get("water_types")
-    taste_category_names = labels.get("taste_categories")
+    water_type_names = label_data.get("water_types")
+    taste_category_names = label_data.get("taste_categories")
 
     if not isinstance(water_type_names, list) or not water_type_names:
         raise ValueError(f"Invalid water_types in {labels_path}")
@@ -216,11 +215,11 @@ def _(np, num_training_steps, y_taste, X_water):
                     self.b1 -= lr * grad_b1
 
 
-    input_dim = X_water.shape[1]
+    fwd_input_dim = X_water.shape[1]
     num_classes = int(y_taste.max()) + 1
 
     mlp = SimpleMLP(
-        input_dim=input_dim, hidden_dim=16, output_dim=num_classes, seed=0
+        input_dim=fwd_input_dim, hidden_dim=16, output_dim=num_classes, seed=0
     )
     mlp.train(
         X_water,
@@ -232,8 +231,8 @@ def _(np, num_training_steps, y_taste, X_water):
     )
 
     # Report training accuracy just for confirmation
-    train_pred = np.argmax(mlp.predict_proba(X_water), axis=1)
-    train_accuracy = float((train_pred == y_taste).mean())
+    fwd_train_pred = np.argmax(mlp.predict_proba(X_water), axis=1)
+    train_accuracy = float((fwd_train_pred == y_taste).mean())
 
     train_accuracy
     return SimpleMLP, mlp, num_classes, train_accuracy
@@ -302,13 +301,13 @@ def _(mo, water_type_names):
 
     # Use human-readable labels as the option names, e.g.
     # "0: Class 0 – crisp & balanced profile".
-    labels = [f"{i}: {label}" for i, label in enumerate(water_type_names)]
+    water_labels = [f"{i}: {label}" for i, label in enumerate(water_type_names)]
 
     # The initial value must be one of the option names.
-    default_label = labels[0]
+    default_label = water_labels[0]
 
     input_selector = mo.ui.dropdown(
-        options=labels,
+        options=water_labels,
         value=default_label,
         label="Water type (0–7)",
     )
@@ -332,11 +331,11 @@ def _(SimpleMLP, X_taste, np, num_training_steps, y_water):
     Output: water type index (0–7)
     """
 
-    input_dim = X_taste.shape[1]
+    inv_input_dim = X_taste.shape[1]
     num_water = int(y_water.max()) + 1
 
     mlp_inv = SimpleMLP(
-        input_dim=input_dim, hidden_dim=16, output_dim=num_water, seed=2
+        input_dim=inv_input_dim, hidden_dim=16, output_dim=num_water, seed=2
     )
     mlp_inv.train(
         X_taste,
@@ -347,8 +346,8 @@ def _(SimpleMLP, X_taste, np, num_training_steps, y_water):
         seed=3,
     )
 
-    train_pred = np.argmax(mlp_inv.predict_proba(X_taste), axis=1)
-    inv_train_accuracy = float((train_pred == y_water).mean())
+    inv_train_pred = np.argmax(mlp_inv.predict_proba(X_taste), axis=1)
+    inv_train_accuracy = float((inv_train_pred == y_water).mean())
 
     inv_train_accuracy
     return inv_train_accuracy, mlp_inv
@@ -369,18 +368,18 @@ def _(class_to_taste, input_selector, mlp, np, num_water_types):
     selected_index = int(str(selected_label).split(":", 1)[0])
 
     # Build a one-hot input for the chosen class.
-    x = np.eye(num_water_types)[[selected_index]]
+    water_x = np.eye(num_water_types)[[selected_index]]
 
-    logits = mlp.predict_logits(x)[0]
-    probs = mlp.predict_proba(x)[0]
+    water_logits = mlp.predict_logits(water_x)[0]
+    water_probs = mlp.predict_proba(water_x)[0]
 
-    predicted_class = int(np.argmax(probs))
+    predicted_class = int(np.argmax(water_probs))
     taste = class_to_taste(predicted_class)
 
     summary = {
         "selected_input_class": selected_index,
-        "logits": logits.tolist(),
-        "probabilities": probs.tolist(),
+        "logits": water_logits.tolist(),
+        "probabilities": water_probs.tolist(),
         "predicted_output_class": predicted_class,
         "taste_name": taste["name"],
         "taste_description": taste["description"],
@@ -437,14 +436,11 @@ def _(build_prompt_for_class, predicted_class):
 
 
 @app.cell
-def _(json):
+def _(json, urllib_error, urllib_request):
     """
     Low-level helper for calling the OpenRouter API using an
     OpenAI-compatible chat completions endpoint with an image-capable model.
     """
-
-    import urllib.request
-    import urllib.error
 
 
     def generate_taste_image(
@@ -473,19 +469,19 @@ def _(json):
             "Authorization": f"Bearer {api_key}",
         }
 
-        request = urllib.request.Request(
+        request = urllib_request.Request(
             url, data=data, headers=headers, method="POST"
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib_request.urlopen(request, timeout=60) as response:
                 raw = response.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
+        except urllib_error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="ignore")
             raise RuntimeError(
                 f"HTTP error from OpenRouter: {e.code} {error_body}"
             ) from e
-        except urllib.error.URLError as e:
+        except urllib_error.URLError as e:
             raise RuntimeError(
                 f"Network error while calling OpenRouter: {e}"
             ) from e
@@ -551,15 +547,15 @@ def _(generate_taste_image, mo, os, prompt, run_button):
             "Make sure OPENROUTER_API_KEY is set in your environment."
         )
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
+    image_api_key = os.getenv("OPENROUTER_API_KEY")
+    if not image_api_key:
         mo.stop(
             "OPENROUTER_API_KEY is not set. "
             "Set it in your environment and re-run this cell."
         )
 
     try:
-        image_url = generate_taste_image(prompt, api_key=api_key)
+        image_url = generate_taste_image(prompt, api_key=image_api_key)
     except Exception as e:  # noqa: BLE001
         mo.stop(f"Error while calling OpenRouter: {e}")
 
@@ -570,7 +566,19 @@ def _(generate_taste_image, mo, os, prompt, run_button):
 
 
 @app.cell
-def _(json, mo, np, num_taste_categories, taste_categories, taste_selector, taste_text, taste_text_to_categories, mlp_inv, water_type_names, os):
+def _(
+    json,
+    mo,
+    np,
+    num_taste_categories,
+    taste_categories,
+    taste_selector,
+    taste_text,
+    taste_text_to_categories,
+    mlp_inv,
+    water_type_names,
+    os,
+):
     """
     Inverse recommendation: free-form taste -> categories -> MLP -> top-3 waters.
 
@@ -578,19 +586,19 @@ def _(json, mo, np, num_taste_categories, taste_categories, taste_selector, tast
     ranking (handles overlaps naturally).
     """
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
     # Decide which categories to use.
     inferred_categories: list[int] = []
     used_fallback = False
 
     if str(taste_text.value or "").strip():
-        if api_key:
+        if openrouter_api_key:
             try:
                 inferred_categories = taste_text_to_categories(
                     taste_text=str(taste_text.value),
                     taste_categories=taste_categories,
-                    api_key=api_key,
+                    api_key=openrouter_api_key,
                     max_categories=3,
                 )
             except Exception as e:  # noqa: BLE001
@@ -613,21 +621,25 @@ def _(json, mo, np, num_taste_categories, taste_categories, taste_selector, tast
         inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
 
     # Aggregate logits across categories (simple average of logits).
-    logits_sum = None
+    inv_logits_sum = None
     for c in inferred_categories:
-        x = np.eye(num_taste_categories)[[int(c)]]
-        logits = mlp_inv.predict_logits(x)[0]
-        logits_sum = logits if logits_sum is None else (logits_sum + logits)
+        inv_x = np.eye(num_taste_categories)[[int(c)]]
+        inv_logits = mlp_inv.predict_logits(inv_x)[0]
+        inv_logits_sum = (
+            inv_logits
+            if inv_logits_sum is None
+            else (inv_logits_sum + inv_logits)
+        )
 
-    logits_avg = logits_sum / max(1, len(inferred_categories))
+    logits_avg = inv_logits_sum / max(1, len(inferred_categories))
 
     # Convert to probabilities via softmax.
     logits_shift = logits_avg - logits_avg.max()
     exp_logits = np.exp(logits_shift)
-    probs = exp_logits / exp_logits.sum()
+    inv_probs = exp_logits / exp_logits.sum()
 
     topk = 3
-    top_indices = np.argsort(-probs)[:topk].tolist()
+    top_indices = np.argsort(-inv_probs)[:topk].tolist()
 
     recs = [
         {
@@ -635,7 +647,7 @@ def _(json, mo, np, num_taste_categories, taste_categories, taste_selector, tast
             "water_name": water_type_names[int(i)]
             if int(i) < len(water_type_names)
             else f"water_type_{int(i)}",
-            "probability": float(probs[int(i)]),
+            "probability": float(inv_probs[int(i)]),
         }
         for i in top_indices
     ]
@@ -654,16 +666,13 @@ def _(json, mo, np, num_taste_categories, taste_categories, taste_selector, tast
 
 
 @app.cell
-def _(json):
+def _(json, urllib_error, urllib_request):
     """
     Helper: use OpenRouter chat completions to map free-form taste text
     into one or more taste categories (0–9).
 
     We keep the output machine-readable and validate it strictly.
     """
-
-    import urllib.request
-    import urllib.error
 
     def _openrouter_chat(
         *,
@@ -686,19 +695,19 @@ def _(json):
             "Authorization": f"Bearer {api_key}",
         }
 
-        request = urllib.request.Request(
+        request = urllib_request.Request(
             url, data=data, headers=headers, method="POST"
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            with urllib_request.urlopen(request, timeout=timeout_s) as response:
                 raw = response.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
+        except urllib_error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="ignore")
             raise RuntimeError(
                 f"HTTP error from OpenRouter: {e.code} {error_body}"
             ) from e
-        except urllib.error.URLError as e:
+        except urllib_error.URLError as e:
             raise RuntimeError(
                 f"Network error while calling OpenRouter: {e}"
             ) from e
