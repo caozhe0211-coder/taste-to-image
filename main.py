@@ -19,20 +19,21 @@ def _():
 @app.cell
 def _():
     """
-    Define 7 abstract input classes.
+    Define 8 water input classes.
 
-    These represent different hypothetical water profiles that the MLP will
-    learn to map into 7 "taste" classes.
+    These represent the water types from mapping.md that the MLP will
+    learn to map into 10 taste categories.
     """
 
     input_class_names = [
-        "Class 0 – crisp & balanced profile",
-        "Class 1 – mineral-forward profile",
-        "Class 2 – citrus-infused profile",
-        "Class 3 – smoky & metallic profile",
-        "Class 4 – ocean-adjacent, slightly briny profile",
-        "Class 5 – floral & delicate profile",
-        "Class 6 – earthy & robust profile",
+        "tap water",
+        "boiled tap water",
+        "boiled filtered water",
+        "filtered water",
+        "REWE Still water (with high materials)",
+        "Black Forest Still water (with low materials)",
+        "Sprudel Water",
+        "Volvic Touch",
     ]
 
     num_input_classes = len(input_class_names)
@@ -42,25 +43,25 @@ def _():
 @app.cell
 def _(np, num_input_classes, os):
     """
-    Load a simple brand→taste mapping dataset for training the MLP.
+    Load a brand→taste mapping dataset for training the MLP.
 
     The dataset is stored in `water_taste_data.csv`, with each row containing
-    two integers:
+    two integers (plus a header row):
 
-      input_class (0–6): the water brand / input class index
-      output_class (0–6): the taste class index
+      input_class (0–7): the water type / input class index
+      output_class (0–9): the taste category index
 
-    During loading, input_class is converted to a one-hot vector of length 7.
+    During loading, input_class is converted to a one-hot vector of length 8.
     """
 
-    data_path = "water_taste_data_dummy.csv"
+    data_path = "water_taste_data.csv"
     if not os.path.exists(data_path):
         raise FileNotFoundError(
             f"Dataset file '{data_path}' not found. "
             "Make sure it exists or regenerate it."
         )
 
-    data = np.loadtxt(data_path, delimiter=",", dtype=int)
+    data = np.loadtxt(data_path, delimiter=",", dtype=int, skiprows=1)
 
     # Handle the edge case where there's only a single row.
     if data.ndim == 1:
@@ -103,7 +104,7 @@ def _():
 def _(X, np, num_training_steps, y):
     """
     Define and train a simple 2-layer MLP classifier that maps the
-    7-dimensional input into 7 output classes.
+    8-dimensional input into 10 output classes.
 
     This is a minimal NumPy-based implementation (no external ML libraries).
     """
@@ -219,7 +220,7 @@ def _(X, np, num_training_steps, y):
 @app.cell
 def _():
     """
-    Map the 7 output classes into 7 distinct water taste profiles.
+    Map the 10 output classes into 10 taste categories.
 
     These will be used both for display and for constructing prompts for
     the image generation model.
@@ -227,52 +228,64 @@ def _():
 
     taste_profiles = {
         0: {
-            "name": "Crisp Glacier Melt",
+            "name": "Sweet & Fruity",
             "description": (
-                "Ultra-clean, almost flavorless water with a faint hint of cold "
-                "stone and alpine air. Very light, smooth, and refreshing."
+                "Sweet, fruity notes with a gentle aroma; light candy-like or "
+                "fresh fruit impression."
             ),
         },
         1: {
-            "name": "Mineral-Rich Spring",
+            "name": "Bitter",
             "description": (
-                "Water with a noticeable mineral backbone — calcium and magnesium "
-                "notes, slightly chalky yet pleasantly grounding."
+                "Noticeable bitterness on the tongue; a sharp, drying edge."
             ),
         },
         2: {
-            "name": "Citrus-Infused Spa Water",
+            "name": "Acidic",
             "description": (
-                "Bright, zesty water with hints of lemon and lime peel, giving a "
-                "lively, invigorating sensation."
+                "Tangy, sour impression reminiscent of citrus acidity."
             ),
         },
         3: {
-            "name": "Smoky Volcanic Spring",
+            "name": "Salty & Mineral",
             "description": (
-                "A bold, unusual profile with subtle sulfurous and smoky notes, "
-                "evoking volcanic rock and geothermal pools."
+                "Saline, mineral-heavy taste with hints of dust, metal, or stone."
             ),
         },
         4: {
-            "name": "Ocean Breeze Salinity",
+            "name": "Soft & Smooth",
             "description": (
-                "Lightly briny water reminiscent of sea spray and coastal air, "
-                "saline yet still drinkable and refreshing."
+                "Soft, smooth mouthfeel; gentle and mild with a rounded finish."
             ),
         },
         5: {
-            "name": "Floral Mountain Stream",
+            "name": "Hard, Rough & Dry",
             "description": (
-                "Delicate floral hints, like wildflowers near a mountain brook, "
-                "with soft sweetness and gentle aroma."
+                "Hard, rough texture with a dry or slightly sticky finish."
             ),
         },
         6: {
-            "name": "Earthy Deep Well",
+            "name": "Stimulating & Carbonated",
             "description": (
-                "Robust, earthy water with faint clay and stone notes, evoking "
-                "an old stone well and damp soil after rain."
+                "Tingling, sparkling sensation; lively, stimulating bubbles."
+            ),
+        },
+        7: {
+            "name": "Fresh, Cool & Clean",
+            "description": (
+                "Crisp, refreshing, and cool; clean and natural impression."
+            ),
+        },
+        8: {
+            "name": "Tasteless & Neutral",
+            "description": (
+                "Neutral and bland; minimal flavor with a straightforward finish."
+            ),
+        },
+        9: {
+            "name": "Artificial & Off-flavor",
+            "description": (
+                "Chemical or artificial notes; off-flavors that feel out of place."
             ),
         },
     }
@@ -313,7 +326,7 @@ def _(taste_profiles):
 @app.cell
 def _(input_class_names, mo):
     """
-    UI control for selecting one of the 7 input classes.
+    UI control for selecting one of the 8 input classes.
     """
 
     # Use human-readable labels as the option names, e.g.
@@ -326,7 +339,7 @@ def _(input_class_names, mo):
     input_selector = mo.ui.dropdown(
         options=labels,
         value=default_label,
-        label="Input water class (0–6)",
+        label="Input water class (0–7)",
     )
 
     input_selector
@@ -340,7 +353,7 @@ def _():
 
 
 @app.cell
-def _(class_to_taste, input_selector, mlp, np, num_classes):
+def _(class_to_taste, input_selector, mlp, np, num_input_classes):
     """
     Use the trained MLP to map the selected input class into an output
     taste class. Display logits, probabilities, and the chosen taste
@@ -354,7 +367,7 @@ def _(class_to_taste, input_selector, mlp, np, num_classes):
     selected_index = int(str(selected_label).split(":", 1)[0])
 
     # Build a one-hot input for the chosen class.
-    x = np.eye(num_classes)[[selected_index]]
+    x = np.eye(num_input_classes)[[selected_index]]
 
     logits = mlp.predict_logits(x)[0]
     probs = mlp.predict_proba(x)[0]
