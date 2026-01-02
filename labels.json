@@ -1,0 +1,24 @@
+{
+  "water_types": [
+    "tap water",
+    "boiled tap water",
+    "boiled filtered water",
+    "filtered water",
+    "REWE Still water (with high materials)",
+    "Black Forest Still water (with low materials)",
+    "Sprudel Water",
+    "Volvic Touch"
+  ],
+  "taste_categories": [
+    "Sweet & Fruity",
+    "Bitter",
+    "Acidic",
+    "Salty & Mineral",
+    "Soft & Smooth",
+    "Hard, Rough & Dry",
+    "Stimulating & Carbonated",
+    "Fresh, Cool & Clean",
+    "Tasteless & Neutral",
+    "Artificial & Off-flavor"
+  ]
+}
