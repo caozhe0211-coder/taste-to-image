@@ -7,6 +7,35 @@ app = marimo.App()
 @app.cell
 def _():
     """
+    Overview for non-technical readers.
+    """
+    import marimo as mo
+
+    mo.md(
+        "# Water Taste Lab (Demo Notebook)\n\n"
+        "This notebook is a small, experimental demo that connects **water taste**, "
+        "**data-driven recommendations**, and **AI image generation**. The goal is to "
+        "make water taste easier to describe, easier to compare, and even easier to "
+        "visualize.\n\n"
+        "**Flow of the experiment:**\n"
+        "1) Collect taste notes and group them into a few easy categories.\n"
+        "2) Train a small model to learn how taste categories map to water types.\n"
+        "3) Let people pick the tastes they want, then recommend matching waters.\n"
+        "4) Use a modern image model to visualize what a taste might *look like*.\n\n"
+        "This is a proof‑of‑concept for communication and exploration. "
+        "It prioritizes clarity over technical detail. Therefore we by default folds all the codes instead we write a small explanation on what has been done in the code. You can feel free to expand any code cell to see the exact implementation details."
+    )
+    return (mo,)
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
+    """
     Common imports shared across the app.
     """
 
@@ -18,8 +47,24 @@ def _():
     return json, np, os, urllib_error, urllib_request
 
 
-@app.cell
-def _(json, os):
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Section: data and categories.
+    """
+
+    mo.md(
+        "## Step 1: Taste data and categories\n\n"
+        "Start with a small dataset of water taste notes. "
+        "Those notes are grouped into a small set of taste categories so people "
+        "can talk about water in a simple, consistent way.\n\n"
+        "If you're curious, you can expand the code cell below to see the exact steps."
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(json, mo, os):
     """
     Load canonical labels (water types and taste categories).
 
@@ -47,12 +92,20 @@ def _(json, os):
 
     taste_categories = {i: str(name) for i, name in enumerate(taste_category_names)}
     num_taste_categories = len(taste_categories)
+    mo.md(
+        "Load the official names for water types and taste categories. "
+        "This keeps labels consistent everywhere in the notebook."
+    )
+    return (
+        num_taste_categories,
+        num_water_types,
+        taste_categories,
+        water_type_names,
+    )
 
-    return num_taste_categories, num_water_types, taste_categories, water_type_names
 
-
-@app.cell
-def _(np, num_taste_categories, num_water_types, os):
+@app.cell(hide_code=True)
+def _(mo, np, num_taste_categories, num_water_types, os):
     """
     Load the real water→taste dataset for training.
 
@@ -106,31 +159,51 @@ def _(np, num_taste_categories, num_water_types, os):
     X_taste = np.eye(num_taste_categories)[taste_indices]
     y_water = water_indices
 
-    return X_taste, X_water, y_taste, y_water, water_indices, taste_indices
+    mo.md(
+        "Load the taste dataset and do a quick cleanup check. "
+        "This turns the raw rows into the simple format the model can learn from."
+    )
+    return X_taste, X_water, y_taste, y_water
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
     """
     Training configuration for the MLP.
 
     `num_training_steps` controls how many epochs the network trains for.
     """
-
     num_training_steps = 100
+    mo.md(
+        "Set how long the small learning model should train. "
+        "More steps can help it learn patterns, but too many can overfit."
+    )
     return (num_training_steps,)
 
 
-@app.cell
-def _(np, num_training_steps, y_taste, X_water):
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Section: learn taste patterns.
+    """
+
+    mo.md(
+        "## Step 2: Learn taste patterns (small model)\n\n"
+        "Train a tiny model that learns how water types relate to the taste "
+        "categories. It’s not meant to be perfect—just good enough to show the idea.\n\n"
+        "If you're curious, you can expand the code cell below to see the exact steps."
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(X_water, mo, np, num_training_steps, y_taste):
     """
     Define and train a simple 2-layer MLP classifier that maps the
     one-hot water type into taste categories.
 
     This is a minimal NumPy-based implementation (no external ML libraries).
     """
-
-
     class SimpleMLP:
         def __init__(
             self, input_dim: int, hidden_dim: int, output_dim: int, seed: int = 0
@@ -234,12 +307,27 @@ def _(np, num_training_steps, y_taste, X_water):
     fwd_train_pred = np.argmax(mlp.predict_proba(X_water), axis=1)
     train_accuracy = float((fwd_train_pred == y_taste).mean())
 
-    train_accuracy
-    return SimpleMLP, mlp, num_classes, train_accuracy
+    mo.vstack(
+        [
+            mo.md(
+                "Train a tiny model that learns a simple mapping: water type → taste. "
+                "Think of it as a lightweight pattern‑finder, not a perfect predictor."
+            ),
+            mo.md(
+                f"Training accuracy (water → taste): **{train_accuracy:.1%}**"
+            ),
+            mo.md(
+                "A low number here is expected because the dataset is small and the "
+                "taste labels are coarse. The goal is to prove the workflow, not to "
+                "claim a production‑ready model."
+            ),
+        ]
+    )
+    return SimpleMLP, mlp
 
 
-@app.cell
-def _(taste_categories):
+@app.cell(hide_code=True)
+def _(mo, taste_categories):
     """
     Map the taste categories into prompt-friendly profiles.
 
@@ -259,16 +347,19 @@ def _(taste_categories):
             ),
         }
 
+    mo.md(
+        "Attach a short, human‑readable profile to each taste category. "
+        "These become the words we later use to describe and visualize tastes."
+    )
     return (taste_profiles,)
 
 
-@app.cell
-def _(taste_profiles):
+@app.cell(hide_code=True)
+def _(mo, taste_profiles):
     """
     Helpers to map the MLP's predicted class index into a taste profile and
     to construct a prompt template for image generation.
     """
-
 
     def class_to_taste(class_index: int):
         index = int(class_index)
@@ -290,15 +381,34 @@ def _(taste_profiles):
         )
 
         return prompt
+
+    mo.md(
+        "Create helper functions so tastes can be translated into prompts "
+        "for the image model later."
+    )
     return build_prompt_for_class, class_to_taste
 
 
-@app.cell
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Section: choose taste preferences.
+    """
+
+    mo.md(
+        "## Step 3: Choose tastes and get recommendations\n\n"
+        "Pick one or more taste categories. The system treats these as your "
+        "target preferences and immediately recommends matching waters below.\n\n"
+        "If you're curious, you can expand the code cell below to see the exact steps."
+    )
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo, water_type_names):
     """
     UI control for selecting a water type (0–7).
     """
-
     # Use human-readable labels as the option names, e.g.
     # "0: Class 0 – crisp & balanced profile".
     water_labels = [f"{i}: {label}" for i, label in enumerate(water_type_names)]
@@ -312,25 +422,26 @@ def _(mo, water_type_names):
         label="Water type (0–7)",
     )
 
-    input_selector
+    mo.vstack(
+        [
+            mo.md(
+                "Pick a specific water type to see the model’s predicted taste profile. "
+                "This is a quick way to sanity‑check the learned mapping."
+            ),
+            input_selector,
+        ]
+    )
     return (input_selector,)
 
 
-@app.cell
-def _():
-    import marimo as mo
-    return (mo,)
-
-
-@app.cell
-def _(SimpleMLP, X_taste, np, num_training_steps, y_water):
+@app.cell(hide_code=True)
+def _(SimpleMLP, X_taste, mo, np, num_training_steps, y_water):
     """
     Train the inverse model: taste category -> water type recommendation.
 
     Input: one-hot taste (length 9)
     Output: water type index (0–7)
     """
-
     inv_input_dim = X_taste.shape[1]
     num_water = int(y_water.max()) + 1
 
@@ -349,18 +460,31 @@ def _(SimpleMLP, X_taste, np, num_training_steps, y_water):
     inv_train_pred = np.argmax(mlp_inv.predict_proba(X_taste), axis=1)
     inv_train_accuracy = float((inv_train_pred == y_water).mean())
 
-    inv_train_accuracy
-    return inv_train_accuracy, mlp_inv
+    mo.vstack(
+        [
+            mo.md(
+                "Train the reverse direction: taste → recommended water. "
+                "This is the core of the recommendation step."
+            ),
+            mo.md(
+                f"Training accuracy (taste → water): **{inv_train_accuracy:.1%}**"
+            ),
+            mo.md(
+                "A low number here is expected with a tiny dataset. The key point "
+                "is that the pipeline still runs end‑to‑end and produces a working demo."
+            ),
+        ]
+    )
+    return (mlp_inv,)
 
 
-@app.cell
-def _(class_to_taste, input_selector, mlp, np, num_water_types):
+@app.cell(hide_code=True)
+def _(class_to_taste, input_selector, mlp, mo, np, num_water_types):
     """
     Use the trained MLP to map the selected input class into an output
     taste class. Display logits, probabilities, and the chosen taste
     profile.
     """
-
     # Dropdown returns a human-readable label like
     # "0: Class 0 – crisp & balanced profile". Parse the
     # integer class index from the prefix before the colon.
@@ -385,111 +509,98 @@ def _(class_to_taste, input_selector, mlp, np, num_water_types):
         "taste_description": taste["description"],
     }
 
-    summary
+    mo.vstack(
+        [
+            mo.md(
+                "Predicted taste details for the selected water. "
+                "This shows the model’s best guess and its confidence scores."
+            ),
+            mo.json(summary),
+        ]
+    )
     return (predicted_class,)
 
 
-@app.cell
-def _(mo, taste_categories):
+@app.cell(hide_code=True)
+def _(mo):
     """
-    Persist the free-form text input across cell reruns.
+    Persist selected taste categories across reruns.
     """
-
-    get_taste_text, set_taste_text = mo.state("")
-    return get_taste_text, set_taste_text
-
-
-@app.cell
-def _(get_taste_text, mo, set_taste_text, taste_categories):
-    """
-    Free-form taste description input.
-    """
-
-    taste_text = mo.ui.text_area(
-        label="Describe the taste (free form)",
-        placeholder="e.g. refreshing, a bit bitter, mineral...",
-        value=get_taste_text(),
-        rows=4,
-        debounce=False,
-        on_change=set_taste_text,
+    get_selected_tastes, set_selected_tastes = mo.state([])
+    mo.md(
+        "Remember selected taste categories so you don’t lose them "
+        "when the notebook reruns."
     )
-
-    taste_text
-    return (taste_text,)
+    return get_selected_tastes, set_selected_tastes
 
 
-@app.cell
-def _(mo, num_taste_categories, taste_categories):
+@app.cell(hide_code=True)
+def _(get_selected_tastes, mo, set_selected_tastes, taste_categories):
     """
-    Fallback structured input (when no API key / as a control baseline).
+    Checkbox list input for desired taste categories.
     """
+    names = [taste_categories[i] for i in sorted(taste_categories)]
+    selected_taste_set = set(get_selected_tastes())
 
-    options = [f"{i}: {taste_categories[i]}" for i in range(num_taste_categories)]
-    taste_selector = mo.ui.dropdown(
-        options=options,
-        value=options[0],
-        label="Or pick a taste category directly (0–8)",
+    def _toggle(name: str):
+        def _handler(checked: bool):
+            current = set(get_selected_tastes())
+            if checked:
+                current.add(name)
+            else:
+                current.discard(name)
+            set_selected_tastes(sorted(current))
+
+        return _handler
+
+    checkboxes = [
+        mo.ui.checkbox(
+            label=name,
+            value=name in selected_taste_set,
+            on_change=_toggle(name),
+        )
+        for name in names
+    ]
+
+    mo.vstack(
+        [
+            mo.md("Pick one or more taste categories (check all that apply):"),
+            mo.md(
+                "Pick the taste categories you’re aiming for. "
+                "This becomes the input to the recommendation step."
+            ),
+            mo.vstack(checkboxes),
+        ]
     )
-
-    taste_selector
-    return (taste_selector,)
+    return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
-    get_taste_text,
-    json,
+    get_selected_tastes,
+    mlp_inv,
     mo,
     np,
     num_taste_categories,
     taste_categories,
-    taste_selector,
-    taste_text_to_categories,
-    mlp_inv,
     water_type_names,
-    os,
 ):
     """
-    Inverse recommendation: free-form taste -> categories -> MLP -> top-3 waters.
+    Inverse recommendation: selected tastes -> MLP -> top-3 waters.
 
-    We aggregate logits across the inferred categories to produce one overall
+    Aggregate logits across the inferred categories to produce one overall
     ranking (handles overlaps naturally).
     """
+    name_to_index = {taste_categories[i]: i for i in taste_categories}
+    selected_taste_names = get_selected_tastes() or []
+    inferred_categories = [
+        int(name_to_index[name])
+        for name in selected_taste_names
+        if name in name_to_index
+    ]
 
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-    text_value = str(get_taste_text() or "").strip()
-
-    # Decide which categories to use.
-    inferred_categories: list[int] = []
-    used_fallback = False
-
-    if text_value:
-        if openrouter_api_key:
-            try:
-                inferred_categories = taste_text_to_categories(
-                    taste_text=text_value,
-                    taste_categories=taste_categories,
-                    api_key=openrouter_api_key,
-                    max_categories=3,
-                )
-            except Exception as e:  # noqa: BLE001
-                used_fallback = True
-                inferred_categories = [
-                    int(str(taste_selector.value).split(":", 1)[0])
-                ]
-                mo.md(
-                    f"⚠️ Could not map free-form text via LLM ({e}). "
-                    "Falling back to the selected category dropdown."
-                )
-        else:
-            used_fallback = True
-            inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
-            mo.md(
-                "ℹ️ OPENROUTER_API_KEY not set; using the selected category dropdown."
-            )
-    else:
-        used_fallback = True
-        inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
+    if not inferred_categories:
+        mo.stop("Please select at least one taste category.")
 
     # Aggregate logits across categories (simple average of logits).
     inv_logits_sum = None
@@ -524,7 +635,6 @@ def _(
     ]
 
     result = {
-        "used_fallback_category_dropdown": bool(used_fallback),
         "inferred_taste_categories": inferred_categories,
         "inferred_taste_category_names": [
             taste_categories[int(c)] for c in inferred_categories
@@ -532,30 +642,58 @@ def _(
         "top_3_recommendations": recs,
     }
 
-    result
+    mo.vstack(
+        [
+            mo.md(
+                "Recommendation result (top matches based on your selected tastes). "
+                "Combine your chosen tastes, score all water types, and list the top 3."
+            ),
+            mo.json(result),
+        ]
+    )
     return
 
 
-@app.cell
-def _(build_prompt_for_class, predicted_class):
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Section: visualize taste with AI.
+    """
+
+    mo.md(
+        "## Step 5: Visualize the taste with AI\n\n"
+        "Use a state‑of‑the‑art image model to create a visual metaphor for a "
+        "taste. This helps people build intuition and discuss flavors more easily.\n\n"
+        "If you're curious, you can expand the code cell below to see the exact steps."
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(build_prompt_for_class, mo, predicted_class):
     """
     Build the exact prompt string that will be sent to the image model
     for the current predicted taste.
     """
-
     prompt = build_prompt_for_class(predicted_class)
-    prompt
+    mo.vstack(
+        [
+            mo.md(
+                "Prompt sent to the image model. This is the text description used to "
+                "generate the visual taste metaphor."
+            ),
+            mo.md(f"```text\n{prompt}\n```"),
+        ]
+    )
     return (prompt,)
 
 
-@app.cell
-def _(json, urllib_error, urllib_request):
+@app.cell(hide_code=True)
+def _(json, mo, urllib_error, urllib_request):
     """
     Low-level helper for calling the OpenRouter API using an
     OpenAI-compatible chat completions endpoint with an image-capable model.
     """
-
-
     def generate_taste_image(
         prompt: str,
         api_key: str,
@@ -614,6 +752,11 @@ def _(json, urllib_error, urllib_request):
             ) from e
 
         return image_url
+
+    mo.md(
+        "Define the API call for the image model so we can request "
+        "a visual representation of a taste."
+    )
     return (generate_taste_image,)
 
 
@@ -622,30 +765,20 @@ def _(mo):
     """
     UI control for triggering the OpenRouter image generation.
     """
-
     run_button = mo.ui.run_button(label="Generate taste image with OpenRouter")
 
-    run_button
+    mo.vstack(
+        [
+            mo.md(
+                "Add a button so image generation only happens when you want it to."
+            ),
+            run_button,
+        ]
+    )
     return (run_button,)
 
 
-@app.cell
-def _(mo, os):
-    """
-    Debug: show whether OPENROUTER_API_KEY is visible to the Marimo app.
-    """
-
-    has_key = bool(os.getenv("OPENROUTER_API_KEY"))
-
-    status = (
-        "✅ OPENROUTER_API_KEY detected in this Marimo session."
-        if has_key
-        else "⚠️ OPENROUTER_API_KEY not detected in this Marimo session."
-    )
-    mo.md(status)
-
-
-@app.cell
+@app.cell(hide_code=True)
 def _(generate_taste_image, mo, os, prompt, run_button):
     """
     Interactive step: call OpenRouter with the constructed prompt to generate
@@ -653,7 +786,6 @@ def _(generate_taste_image, mo, os, prompt, run_button):
 
     Uses a run_button so that the API is only called when explicitly requested.
     """
-
     if not run_button.value:
         mo.stop(
             "Click the button above to call OpenRouter's image model. "
@@ -674,134 +806,36 @@ def _(generate_taste_image, mo, os, prompt, run_button):
 
     # `image_url` is a data URL (e.g. data:image/png;base64,...);
     # use marimo's built-in image helper to render it.
-    mo.image(src=image_url, width=512, rounded=True)
+    mo.vstack(
+        [
+            mo.md(
+                "Generated image output. This visual is the model’s attempt to represent "
+                "the selected taste in a picture."
+            ),
+            mo.image(src=image_url, width=512, rounded=True),
+        ]
+    )
     return
 
 
-
-
-@app.cell
-def _(json, urllib_error, urllib_request):
+@app.cell(hide_code=True)
+def _(mo):
     """
-    Helper: use OpenRouter chat completions to map free-form taste text
-    into one or more taste categories (0–8).
-
-    We keep the output machine-readable and validate it strictly.
+    Summary and limitations.
     """
 
-    def _openrouter_chat(
-        *,
-        api_key: str,
-        messages: list[dict],
-        model: str = "google/gemini-2.5-flash",
-        base_url: str = "https://openrouter.ai/api/v1",
-        timeout_s: int = 60,
-    ) -> str:
-        url = f"{base_url}/chat/completions"
-
-        payload = {
-            "model": model,
-            "messages": messages,
-        }
-
-        data = json.dumps(payload).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
-
-        request = urllib_request.Request(
-            url, data=data, headers=headers, method="POST"
-        )
-
-        try:
-            with urllib_request.urlopen(request, timeout=timeout_s) as response:
-                raw = response.read().decode("utf-8")
-        except urllib_error.HTTPError as e:
-            error_body = e.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(
-                f"HTTP error from OpenRouter: {e.code} {error_body}"
-            ) from e
-        except urllib_error.URLError as e:
-            raise RuntimeError(
-                f"Network error while calling OpenRouter: {e}"
-            ) from e
-
-        parsed = json.loads(raw)
-        try:
-            return parsed["choices"][0]["message"]["content"]
-        except (KeyError, IndexError) as e:  # noqa: PERF203
-            raise RuntimeError(
-                f"Unexpected OpenRouter response structure: {parsed}"
-            ) from e
-
-    def taste_text_to_categories(
-        *,
-        taste_text: str,
-        taste_categories: dict[int, str],
-        api_key: str,
-        model: str = "google/gemini-2.5-flash",
-        max_categories: int = 3,
-    ) -> list[int]:
-        """
-        Returns a list of taste category indices (0–8), length 1..max_categories.
-        """
-
-        categories_list = "\n".join(
-            [f"{i}: {taste_categories[i]}" for i in sorted(taste_categories)]
-        )
-
-        system = (
-            "You map a user's free-form water taste description into the "
-            "closest taste category indices from a fixed list.\n\n"
-            "Rules:\n"
-            f"- Return ONLY valid JSON.\n"
-            f"- Output schema: {{\"categories\": [int, ...]}}.\n"
-            f"- categories length: 1 to {int(max_categories)}.\n"
-            "- Each category must be one of the listed indices.\n"
-        )
-
-        user = (
-            "Taste categories:\n"
-            f"{categories_list}\n\n"
-            "User description:\n"
-            f"{taste_text}\n\n"
-            "Return JSON now."
-        )
-
-        content = _openrouter_chat(
-            api_key=api_key,
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as e:
-            raise RuntimeError(
-                f"LLM returned non-JSON content: {content}"
-            ) from e
-
-        cats = parsed.get("categories")
-        if not isinstance(cats, list) or not cats:
-            raise RuntimeError(f"Invalid categories payload: {parsed}")
-
-        cleaned: list[int] = []
-        for c in cats[: int(max_categories)]:
-            if isinstance(c, bool) or not isinstance(c, int):
-                continue
-            if c in taste_categories and c not in cleaned:
-                cleaned.append(int(c))
-
-        if not cleaned:
-            raise RuntimeError(f"No valid categories parsed from: {parsed}")
-
-        return cleaned
-
-    return taste_text_to_categories,
+    mo.md(
+        "## Summary and limitations\n\n"
+        "This demo shows that it’s possible to connect taste categories, data‑driven "
+        "recommendations, and AI imagery in one workflow. The goal is to make taste "
+        "more visible and easier to discuss.\n\n"
+        "**Limitations:** this is an experiment with a small dataset and a small set "
+        "of categories. For real‑world use, we would need much more data, richer "
+        "taste categories, and broader validation.\n\n"
+        "**What’s next:** collect more taste data, expand categories, and test with "
+        "real users to improve accuracy and usefulness."
+    )
+    return
 
 
 if __name__ == "__main__":
