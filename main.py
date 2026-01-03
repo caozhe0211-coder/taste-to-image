@@ -392,16 +392,18 @@ def _(mo, taste_profiles):
 @app.cell(hide_code=True)
 def _(mo):
     """
-    Section: choose taste preferences.
+    Section: select water and visualize taste.
     """
 
     mo.md(
-        "## Step 3: Choose tastes and get recommendations\n\n"
-        "Pick one or more taste categories. The system treats these as your "
-        "target preferences and immediately recommends matching waters below.\n\n"
+        "## Step 3: Pick a water type and visualize its taste\n\n"
+        "Choose one water type, see the predicted taste, and (optionally) "
+        "generate an image that represents it.\n\n"
         "If you're curious, you can expand the code cell below to see the exact steps."
     )
     return
+
+
 
 
 @app.cell(hide_code=True)
@@ -432,50 +434,6 @@ def _(mo, water_type_names):
         ]
     )
     return (input_selector,)
-
-
-@app.cell(hide_code=True)
-def _(SimpleMLP, X_taste, mo, np, num_training_steps, y_water):
-    """
-    Train the inverse model: taste category -> water type recommendation.
-
-    Input: one-hot taste (length 9)
-    Output: water type index (0–7)
-    """
-    inv_input_dim = X_taste.shape[1]
-    num_water = int(y_water.max()) + 1
-
-    mlp_inv = SimpleMLP(
-        input_dim=inv_input_dim, hidden_dim=16, output_dim=num_water, seed=2
-    )
-    mlp_inv.train(
-        X_taste,
-        y_water,
-        lr=0.3,
-        epochs=int(num_training_steps),
-        batch_size=32,
-        seed=3,
-    )
-
-    inv_train_pred = np.argmax(mlp_inv.predict_proba(X_taste), axis=1)
-    inv_train_accuracy = float((inv_train_pred == y_water).mean())
-
-    mo.vstack(
-        [
-            mo.md(
-                "Train the reverse direction: taste → recommended water. "
-                "This is the core of the recommendation step."
-            ),
-            mo.md(
-                f"Training accuracy (taste → water): **{inv_train_accuracy:.1%}**"
-            ),
-            mo.md(
-                "A low number here is expected with a tiny dataset. The key point "
-                "is that the pipeline still runs end‑to‑end and produces a working demo."
-            ),
-        ]
-    )
-    return (mlp_inv,)
 
 
 @app.cell(hide_code=True)
@@ -524,144 +482,11 @@ def _(class_to_taste, input_selector, mlp, mo, np, num_water_types):
 @app.cell(hide_code=True)
 def _(mo):
     """
-    Persist selected taste categories across reruns.
-    """
-    get_selected_tastes, set_selected_tastes = mo.state([])
-    mo.md(
-        "Remember selected taste categories so you don’t lose them "
-        "when the notebook reruns."
-    )
-    return get_selected_tastes, set_selected_tastes
-
-
-@app.cell(hide_code=True)
-def _(get_selected_tastes, mo, set_selected_tastes, taste_categories):
-    """
-    Checkbox list input for desired taste categories.
-    """
-    names = [taste_categories[i] for i in sorted(taste_categories)]
-    selected_taste_set = set(get_selected_tastes())
-
-    def _toggle(name: str):
-        def _handler(checked: bool):
-            current = set(get_selected_tastes())
-            if checked:
-                current.add(name)
-            else:
-                current.discard(name)
-            set_selected_tastes(sorted(current))
-
-        return _handler
-
-    checkboxes = [
-        mo.ui.checkbox(
-            label=name,
-            value=name in selected_taste_set,
-            on_change=_toggle(name),
-        )
-        for name in names
-    ]
-
-    mo.vstack(
-        [
-            mo.md("Pick one or more taste categories (check all that apply):"),
-            mo.md(
-                "Pick the taste categories you’re aiming for. "
-                "This becomes the input to the recommendation step."
-            ),
-            mo.vstack(checkboxes),
-        ]
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(
-    get_selected_tastes,
-    mlp_inv,
-    mo,
-    np,
-    num_taste_categories,
-    taste_categories,
-    water_type_names,
-):
-    """
-    Inverse recommendation: selected tastes -> MLP -> top-3 waters.
-
-    Aggregate logits across the inferred categories to produce one overall
-    ranking (handles overlaps naturally).
-    """
-    name_to_index = {taste_categories[i]: i for i in taste_categories}
-    selected_taste_names = get_selected_tastes() or []
-    inferred_categories = [
-        int(name_to_index[name])
-        for name in selected_taste_names
-        if name in name_to_index
-    ]
-
-    if not inferred_categories:
-        mo.stop("Please select at least one taste category.")
-
-    # Aggregate logits across categories (simple average of logits).
-    inv_logits_sum = None
-    for c in inferred_categories:
-        inv_x = np.eye(num_taste_categories)[[int(c)]]
-        inv_logits = mlp_inv.predict_logits(inv_x)[0]
-        inv_logits_sum = (
-            inv_logits
-            if inv_logits_sum is None
-            else (inv_logits_sum + inv_logits)
-        )
-
-    logits_avg = inv_logits_sum / max(1, len(inferred_categories))
-
-    # Convert to probabilities via softmax.
-    logits_shift = logits_avg - logits_avg.max()
-    exp_logits = np.exp(logits_shift)
-    inv_probs = exp_logits / exp_logits.sum()
-
-    topk = 3
-    top_indices = np.argsort(-inv_probs)[:topk].tolist()
-
-    recs = [
-        {
-            "water_type_idx": int(i),
-            "water_name": water_type_names[int(i)]
-            if int(i) < len(water_type_names)
-            else f"water_type_{int(i)}",
-            "probability": float(inv_probs[int(i)]),
-        }
-        for i in top_indices
-    ]
-
-    result = {
-        "inferred_taste_categories": inferred_categories,
-        "inferred_taste_category_names": [
-            taste_categories[int(c)] for c in inferred_categories
-        ],
-        "top_3_recommendations": recs,
-    }
-
-    mo.vstack(
-        [
-            mo.md(
-                "Recommendation result (top matches based on your selected tastes). "
-                "Combine your chosen tastes, score all water types, and list the top 3."
-            ),
-            mo.json(result),
-        ]
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    """
     Section: visualize taste with AI.
     """
 
     mo.md(
-        "## Step 5: Visualize the taste with AI\n\n"
+        "### Visualize the taste with AI\n\n"
         "Use a state‑of‑the‑art image model to create a visual metaphor for a "
         "taste. This helps people build intuition and discuss flavors more easily.\n\n"
         "If you're curious, you can expand the code cell below to see the exact steps."
@@ -813,6 +638,200 @@ def _(generate_taste_image, mo, os, prompt, run_button):
                 "the selected taste in a picture."
             ),
             mo.image(src=image_url, width=512, rounded=True),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Section: recommendations.
+    """
+
+    mo.md(
+        "## Step 4: Choose tastes and get recommendations\n\n"
+        "Pick one or more taste categories. The system treats these as your "
+        "target preferences and recommends matching waters below.\n\n"
+        "If you're curious, you can expand the code cell below to see the exact steps."
+    )
+    return
+
+
+
+
+@app.cell(hide_code=True)
+def _(SimpleMLP, X_taste, mo, np, num_training_steps, y_water):
+    """
+    Train the inverse model: taste category -> water type recommendation.
+
+    Input: one-hot taste (length 9)
+    Output: water type index (0–7)
+    """
+    inv_input_dim = X_taste.shape[1]
+    num_water = int(y_water.max()) + 1
+
+    mlp_inv = SimpleMLP(
+        input_dim=inv_input_dim, hidden_dim=16, output_dim=num_water, seed=2
+    )
+    mlp_inv.train(
+        X_taste,
+        y_water,
+        lr=0.3,
+        epochs=int(num_training_steps),
+        batch_size=32,
+        seed=3,
+    )
+
+    inv_train_pred = np.argmax(mlp_inv.predict_proba(X_taste), axis=1)
+    inv_train_accuracy = float((inv_train_pred == y_water).mean())
+
+    mo.vstack(
+        [
+            mo.md(
+                "Train the reverse direction: taste → recommended water. "
+                "This is the core of the recommendation step."
+            ),
+            mo.md(
+                f"Training accuracy (taste → water): **{inv_train_accuracy:.1%}**"
+            ),
+            mo.md(
+                "A low number here is expected with a tiny dataset. The key point "
+                "is that the pipeline still runs end‑to‑end and produces a working demo."
+            ),
+        ]
+    )
+    return (mlp_inv,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    """
+    Persist selected taste categories across reruns.
+    """
+    get_selected_tastes, set_selected_tastes = mo.state([])
+    mo.md(
+        "Remember selected taste categories so you don’t lose them "
+        "when the notebook reruns."
+    )
+    return get_selected_tastes, set_selected_tastes
+
+
+@app.cell(hide_code=True)
+def _(get_selected_tastes, mo, set_selected_tastes, taste_categories):
+    """
+    Checkbox list input for desired taste categories.
+    """
+    names = [taste_categories[i] for i in sorted(taste_categories)]
+    selected_taste_set = set(get_selected_tastes())
+
+    def _toggle(name: str):
+        def _handler(checked: bool):
+            current = set(get_selected_tastes())
+            if checked:
+                current.add(name)
+            else:
+                current.discard(name)
+            set_selected_tastes(sorted(current))
+
+        return _handler
+
+    checkboxes = [
+        mo.ui.checkbox(
+            label=name,
+            value=name in selected_taste_set,
+            on_change=_toggle(name),
+        )
+        for name in names
+    ]
+
+    mo.vstack(
+        [
+            mo.md("Pick one or more taste categories (check all that apply):"),
+            mo.md(
+                "Pick the taste categories you’re aiming for. "
+                "This becomes the input to the recommendation step."
+            ),
+            mo.vstack(checkboxes),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(
+    get_selected_tastes,
+    mlp_inv,
+    mo,
+    np,
+    num_taste_categories,
+    taste_categories,
+    water_type_names,
+):
+    """
+    Inverse recommendation: selected tastes -> MLP -> top-3 waters.
+
+    Aggregate logits across the inferred categories to produce one overall
+    ranking (handles overlaps naturally).
+    """
+    name_to_index = {taste_categories[i]: i for i in taste_categories}
+    selected_taste_names = get_selected_tastes() or []
+    inferred_categories = [
+        int(name_to_index[name])
+        for name in selected_taste_names
+        if name in name_to_index
+    ]
+
+    if not inferred_categories:
+        mo.stop("Please select at least one taste category.")
+
+    # Aggregate logits across categories (simple average of logits).
+    inv_logits_sum = None
+    for c in inferred_categories:
+        inv_x = np.eye(num_taste_categories)[[int(c)]]
+        inv_logits = mlp_inv.predict_logits(inv_x)[0]
+        inv_logits_sum = (
+            inv_logits
+            if inv_logits_sum is None
+            else (inv_logits_sum + inv_logits)
+        )
+
+    logits_avg = inv_logits_sum / max(1, len(inferred_categories))
+
+    # Convert to probabilities via softmax.
+    logits_shift = logits_avg - logits_avg.max()
+    exp_logits = np.exp(logits_shift)
+    inv_probs = exp_logits / exp_logits.sum()
+
+    topk = 3
+    top_indices = np.argsort(-inv_probs)[:topk].tolist()
+
+    recs = [
+        {
+            "water_type_idx": int(i),
+            "water_name": water_type_names[int(i)]
+            if int(i) < len(water_type_names)
+            else f"water_type_{int(i)}",
+            "probability": float(inv_probs[int(i)]),
+        }
+        for i in top_indices
+    ]
+
+    result = {
+        "inferred_taste_categories": inferred_categories,
+        "inferred_taste_category_names": [
+            taste_categories[int(c)] for c in inferred_categories
+        ],
+        "top_3_recommendations": recs,
+    }
+
+    mo.vstack(
+        [
+            mo.md(
+                "Recommendation result (top matches based on your selected tastes). "
+                "Combine your chosen tastes, score all water types, and list the top 3."
+            ),
+            mo.json(result),
         ]
     )
     return
