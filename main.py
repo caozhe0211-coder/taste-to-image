@@ -58,7 +58,7 @@ def _(np, num_taste_categories, num_water_types, os):
 
     The dataset is stored in `water_taste_data.csv` with columns:
       water_type_idx (0–7)
-      taste_idx (0–9)
+      taste_idx (0–8)
 
     Returns indices for both directions, plus one-hot inputs for the forward and
     inverse models.
@@ -392,14 +392,26 @@ def _(class_to_taste, input_selector, mlp, np, num_water_types):
 @app.cell
 def _(mo, taste_categories):
     """
+    Persist the free-form text input across cell reruns.
+    """
+
+    get_taste_text, set_taste_text = mo.state("")
+    return get_taste_text, set_taste_text
+
+
+@app.cell
+def _(get_taste_text, mo, set_taste_text, taste_categories):
+    """
     Free-form taste description input.
     """
 
     taste_text = mo.ui.text_area(
         label="Describe the taste (free form)",
         placeholder="e.g. refreshing, a bit bitter, mineral...",
-        value="",
+        value=get_taste_text(),
         rows=4,
+        debounce=False,
+        on_change=set_taste_text,
     )
 
     taste_text
@@ -416,11 +428,112 @@ def _(mo, num_taste_categories, taste_categories):
     taste_selector = mo.ui.dropdown(
         options=options,
         value=options[0],
-        label="Or pick a taste category directly (0–9)",
+        label="Or pick a taste category directly (0–8)",
     )
 
     taste_selector
     return (taste_selector,)
+
+
+@app.cell
+def _(
+    get_taste_text,
+    json,
+    mo,
+    np,
+    num_taste_categories,
+    taste_categories,
+    taste_selector,
+    taste_text_to_categories,
+    mlp_inv,
+    water_type_names,
+    os,
+):
+    """
+    Inverse recommendation: free-form taste -> categories -> MLP -> top-3 waters.
+
+    We aggregate logits across the inferred categories to produce one overall
+    ranking (handles overlaps naturally).
+    """
+
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    text_value = str(get_taste_text() or "").strip()
+
+    # Decide which categories to use.
+    inferred_categories: list[int] = []
+    used_fallback = False
+
+    if text_value:
+        if openrouter_api_key:
+            try:
+                inferred_categories = taste_text_to_categories(
+                    taste_text=text_value,
+                    taste_categories=taste_categories,
+                    api_key=openrouter_api_key,
+                    max_categories=3,
+                )
+            except Exception as e:  # noqa: BLE001
+                used_fallback = True
+                inferred_categories = [
+                    int(str(taste_selector.value).split(":", 1)[0])
+                ]
+                mo.md(
+                    f"⚠️ Could not map free-form text via LLM ({e}). "
+                    "Falling back to the selected category dropdown."
+                )
+        else:
+            used_fallback = True
+            inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
+            mo.md(
+                "ℹ️ OPENROUTER_API_KEY not set; using the selected category dropdown."
+            )
+    else:
+        used_fallback = True
+        inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
+
+    # Aggregate logits across categories (simple average of logits).
+    inv_logits_sum = None
+    for c in inferred_categories:
+        inv_x = np.eye(num_taste_categories)[[int(c)]]
+        inv_logits = mlp_inv.predict_logits(inv_x)[0]
+        inv_logits_sum = (
+            inv_logits
+            if inv_logits_sum is None
+            else (inv_logits_sum + inv_logits)
+        )
+
+    logits_avg = inv_logits_sum / max(1, len(inferred_categories))
+
+    # Convert to probabilities via softmax.
+    logits_shift = logits_avg - logits_avg.max()
+    exp_logits = np.exp(logits_shift)
+    inv_probs = exp_logits / exp_logits.sum()
+
+    topk = 3
+    top_indices = np.argsort(-inv_probs)[:topk].tolist()
+
+    recs = [
+        {
+            "water_type_idx": int(i),
+            "water_name": water_type_names[int(i)]
+            if int(i) < len(water_type_names)
+            else f"water_type_{int(i)}",
+            "probability": float(inv_probs[int(i)]),
+        }
+        for i in top_indices
+    ]
+
+    result = {
+        "used_fallback_category_dropdown": bool(used_fallback),
+        "inferred_taste_categories": inferred_categories,
+        "inferred_taste_category_names": [
+            taste_categories[int(c)] for c in inferred_categories
+        ],
+        "top_3_recommendations": recs,
+    }
+
+    result
+    return
 
 
 @app.cell
@@ -565,111 +678,13 @@ def _(generate_taste_image, mo, os, prompt, run_button):
     return
 
 
-@app.cell
-def _(
-    json,
-    mo,
-    np,
-    num_taste_categories,
-    taste_categories,
-    taste_selector,
-    taste_text,
-    taste_text_to_categories,
-    mlp_inv,
-    water_type_names,
-    os,
-):
-    """
-    Inverse recommendation: free-form taste -> categories -> MLP -> top-3 waters.
-
-    We aggregate logits across the inferred categories to produce one overall
-    ranking (handles overlaps naturally).
-    """
-
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-
-    # Decide which categories to use.
-    inferred_categories: list[int] = []
-    used_fallback = False
-
-    if str(taste_text.value or "").strip():
-        if openrouter_api_key:
-            try:
-                inferred_categories = taste_text_to_categories(
-                    taste_text=str(taste_text.value),
-                    taste_categories=taste_categories,
-                    api_key=openrouter_api_key,
-                    max_categories=3,
-                )
-            except Exception as e:  # noqa: BLE001
-                used_fallback = True
-                inferred_categories = [
-                    int(str(taste_selector.value).split(":", 1)[0])
-                ]
-                mo.md(
-                    f"⚠️ Could not map free-form text via LLM ({e}). "
-                    "Falling back to the selected category dropdown."
-                )
-        else:
-            used_fallback = True
-            inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
-            mo.md(
-                "ℹ️ OPENROUTER_API_KEY not set; using the selected category dropdown."
-            )
-    else:
-        used_fallback = True
-        inferred_categories = [int(str(taste_selector.value).split(":", 1)[0])]
-
-    # Aggregate logits across categories (simple average of logits).
-    inv_logits_sum = None
-    for c in inferred_categories:
-        inv_x = np.eye(num_taste_categories)[[int(c)]]
-        inv_logits = mlp_inv.predict_logits(inv_x)[0]
-        inv_logits_sum = (
-            inv_logits
-            if inv_logits_sum is None
-            else (inv_logits_sum + inv_logits)
-        )
-
-    logits_avg = inv_logits_sum / max(1, len(inferred_categories))
-
-    # Convert to probabilities via softmax.
-    logits_shift = logits_avg - logits_avg.max()
-    exp_logits = np.exp(logits_shift)
-    inv_probs = exp_logits / exp_logits.sum()
-
-    topk = 3
-    top_indices = np.argsort(-inv_probs)[:topk].tolist()
-
-    recs = [
-        {
-            "water_type_idx": int(i),
-            "water_name": water_type_names[int(i)]
-            if int(i) < len(water_type_names)
-            else f"water_type_{int(i)}",
-            "probability": float(inv_probs[int(i)]),
-        }
-        for i in top_indices
-    ]
-
-    result = {
-        "used_fallback_category_dropdown": bool(used_fallback),
-        "inferred_taste_categories": inferred_categories,
-        "inferred_taste_category_names": [
-            taste_categories[int(c)] for c in inferred_categories
-        ],
-        "top_3_recommendations": recs,
-    }
-
-    result
-    return
 
 
 @app.cell
 def _(json, urllib_error, urllib_request):
     """
     Helper: use OpenRouter chat completions to map free-form taste text
-    into one or more taste categories (0–9).
+    into one or more taste categories (0–8).
 
     We keep the output machine-readable and validate it strictly.
     """
@@ -729,7 +744,7 @@ def _(json, urllib_error, urllib_request):
         max_categories: int = 3,
     ) -> list[int]:
         """
-        Returns a list of taste category indices (0–9), length 1..max_categories.
+        Returns a list of taste category indices (0–8), length 1..max_categories.
         """
 
         categories_list = "\n".join(
