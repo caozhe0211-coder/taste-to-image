@@ -3,20 +3,19 @@ import re
 
 # ---------------------------------------------------------
 # 1. 定义分类与关键词映射 (基于之前的分析)
-# key: category index (0-9)
+# key: category index (0-8)
 # value: description
 # ---------------------------------------------------------
 taste_categories = {
     0: "Sweet & Fruity (甜味/果香)",
     1: "Bitter (苦味)",
     2: "Acidic (酸味)",
-    3: "Salty & Mineral (咸味/矿物质)",
+    3: "Mineral (矿物质)",
     4: "Soft & Smooth (软/滑)",
     5: "Hard, Rough & Dry (硬/涩/干)",
     6: "Stimulating & Carbonated (刺激/气泡)",
     7: "Fresh, Cool & Clean (清新/凉爽/自然)",
-    8: "Tasteless & Neutral (无味/中性)",
-    9: "Artificial & Off-flavor (人工味/异味)"
+    8: "Tasteless & Neutral (无味/中性)"
 }
 
 # 关键词匹配逻辑
@@ -31,8 +30,7 @@ mapping_rules = [
     (5, ["hard", "dry", "rough", "sticky", "boil"], ["not dry"]),
     (6, ["stimul", "thrill", "irrit", "gas", "spark", "tingle", "energ"], ["no stimul", "no thrill"]),
     (7, ["fresh", "cool", "clean", "crisp", "nature", "mountain", "pale", "summer"], ["not fresh", "not crisp"]),
-    (8, ["tasteless", "neutral", "normal", "quench", "no material"], []),
-    (9, ["chem", "city", "dirty", "many material"], [])
+    (8, ["tasteless", "neutral", "normal", "quench", "no material"], [])
 ]
 
 # ---------------------------------------------------------
@@ -109,7 +107,7 @@ def process_data(input_file, output_file):
         # 清理一下换行符让打印也好看点
         print(f"  {idx}: {name.replace(chr(10), ' ')}") 
         
-    print("\n[第二个集合] Taste Categories (0 - 9):")
+    print("\n[第二个集合] Taste Categories (0 - 8):")
     for idx, desc in taste_categories.items():
         print(f"  {idx}: {desc}")
         

@@ -241,7 +241,7 @@ def _(np, num_training_steps, y_taste, X_water):
 @app.cell
 def _(taste_categories):
     """
-    Map the 10 taste categories into prompt-friendly profiles.
+    Map the taste categories into prompt-friendly profiles.
 
     These will be used both for display and for constructing prompts for
     the image generation model.
@@ -327,7 +327,7 @@ def _(SimpleMLP, X_taste, np, num_training_steps, y_water):
     """
     Train the inverse model: taste category -> water type recommendation.
 
-    Input: one-hot taste (length 10)
+    Input: one-hot taste (length 9)
     Output: water type index (0–7)
     """
 
@@ -397,7 +397,7 @@ def _(mo, taste_categories):
 
     taste_text = mo.ui.text_area(
         label="Describe the taste (free form)",
-        placeholder="e.g. refreshing, a bit bitter, mineral, slightly salty...",
+        placeholder="e.g. refreshing, a bit bitter, mineral...",
         value="",
         rows=4,
     )
